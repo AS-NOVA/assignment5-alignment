@@ -6,9 +6,12 @@ from typing import Any, Callable, Literal
 import torch
 from torch import Tensor
 from torch.utils.data import Dataset
-from transformers import PreTrainedTokenizerBase
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from cs336_alignment.mysft import *
 
 
+# uv run pytest -k test_tokenize_prompt_and_output
+# passed
 def run_tokenize_prompt_and_output(
     prompt_strs: list[str],
     output_strs: list[str],
@@ -31,7 +34,11 @@ def run_tokenize_prompt_and_output(
             "response_mask": torch.Tensor of shape (batch_size, max(prompt_and_output_lens) - 1):
                 a mask on the response tokens in `labels`.
     """
-    raise NotImplementedError
+    return tokenize_prompt_and_output(prompt_strs=prompt_strs,
+                                      output_strs=output_strs,
+                                      tokenizer=tokenizer)
+    
+    
 
 
 def run_compute_group_normalized_rewards(
@@ -79,10 +86,10 @@ def run_compute_group_normalized_rewards(
     """
     raise NotImplementedError
 
-
+# uv run pytest -k test_compute_entropy
 def run_compute_entropy(logits: torch.Tensor) -> torch.Tensor:
     """Get the entropy of the logits (i.e., entropy of the final dimension)."""
-    raise NotImplementedError
+    return compute_entropy(logits)
 
 
 def run_get_response_log_probs(
