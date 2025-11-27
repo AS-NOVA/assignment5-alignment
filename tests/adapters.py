@@ -87,17 +87,19 @@ def run_compute_group_normalized_rewards(
     raise NotImplementedError
 
 # uv run pytest -k test_compute_entropy
+# passed
 def run_compute_entropy(logits: torch.Tensor) -> torch.Tensor:
     """Get the entropy of the logits (i.e., entropy of the final dimension)."""
     return compute_entropy(logits)
 
-
+# uv run pytest -k test_get_response_log_probs
+# passed
 def run_get_response_log_probs(
     model: torch.nn.Module,
     input_ids: torch.Tensor,
     labels: torch.Tensor,
     return_token_entropy: bool,
-) -> torch.Tensor:
+):# -> torch.Tensor:
     """Get the conditional log-probs of the response given the prompt,
         and optionally the entropy of the next token predictions.
 
@@ -121,7 +123,9 @@ def run_get_response_log_probs(
                 we have not masked out the token indices corresponding to the prompt
                 or padding; that is done in the train loop.
     """
-    raise NotImplementedError
+    with torch.no_grad():
+        out = get_response_log_probs(model, input_ids, labels, return_token_entropy)
+        return out
 
 
 def run_compute_naive_policy_gradient_loss(
@@ -202,6 +206,8 @@ def run_masked_mean(tensor: torch.Tensor, mask: torch.Tensor, dim: int | None = 
     """
     raise NotImplementedError
 
+
+# uv run pytest -k test_sft_microbatch_train_step
 def run_sft_microbatch_train_step(
     policy_log_probs: torch.Tensor,
     response_mask: torch.Tensor,
@@ -251,7 +257,8 @@ def run_grpo_microbatch_train_step(
     """
     raise NotImplementedError
 
-
+# uv run pytest -k test_masked_normalize
+# passed
 def run_masked_normalize(
     tensor: torch.Tensor,
     mask: torch.Tensor,
@@ -274,7 +281,7 @@ def run_masked_normalize(
         torch.Tensor, the normalized sum, where masked elements
             (mask=0) don't contribute to the sum.
     """
-    raise NotImplementedError
+    return masked_normalize(tensor,mask,normalize_constant,dim)
 
 
 """

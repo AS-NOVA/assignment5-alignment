@@ -1,6 +1,10 @@
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers.modeling_utils import PreTrainedModel
 import torch
+
+import einops
+from jaxtyping import Float, Int, Bool
 
 #uv run pytest -k test_tokenize_prompt_and_output
 def get_mask_tensor(io_len:list[tuple[int,int]])->torch.Tensor:
@@ -23,18 +27,21 @@ def get_mask_tensor(io_len:list[tuple[int,int]])->torch.Tensor:
 def tokenize_prompt_and_output(
         prompt_strs:list[str],
         output_strs:list[str], 
-        tokenizer:PreTrainedTokenizerBase):
+        tokenizer:PreTrainedTokenizerBase,
+)->dict[str,torch.Tensor]:
     """
-    Tokenize the prompt and output strings, and construct a mask that is 1 for the response tokens and 0 for other tokens (prompt or padding).
+    将给定的问题列表和回答列表制成一份可用于sft的训练数据，包括相互错开一个token的input-label对应表；以及一个mask，用1标出label中回答部分的位置，而问题和尾部填充部分标0。使用给定的分词器。
+
+    在本实现中，尾部填充使用`tokenizer.pad_token_id`。
     Args:
-        prompt_strs(list[str]): List of prompt strings.
-        output_strs(list[str]): List of output strings.
-        tokenizer(PreTrainedTokenizer): Tokenizer to use for tokenization.
+        prompt_strs(list[str]): 问题列表。
+        output_strs(list[str]): 回答列表。
+        tokenizer(PreTrainedTokenizer): 给定的分词器。
     Returns:
-        output(dict[str, torch.Tensor]): Let prompt_and_output_lens be a list containing the lengths of the tokenized prompt and output strings. Then the returned dictionary should have the following keys.
-        - input_ids: torch.Tensor of shape (batch_size, max(prompt_and_output_lens) - 1): the tokenized prompt and output strings, with the final token sliced off.
-        - labels: torch.Tensor of shape (batch_size, max(prompt_and_output_lens) - 1): shifted input ids, i.e., the input ids without the first token.
-        - response_mask: torch.Tensor of shape (batch_size, max(prompt_and_output_lens) - 1): a mask on the response tokens in the labels.
+        output(dict[str, torch.Tensor]): 将token数最多的“问题+回答”组合含有的token数记为L，则返回字典应包含如下内容：
+        - input_ids: torch.Tensor，形如(batch_size, L - 1): 所有“问题+回答”对的分词结果，去掉最后一个token。
+        - labels: torch.Tensor，形如(batch_size, L - 1): 所有“问题+回答”对的分词结果左错一位，即去掉首个token。
+        - response_mask: torch.Tensor，形如(batch_size, L - 1): 在labels上标出“回答”部分位置的mask。
     """
     # print("输入:",prompt_strs)
     # print("输出:",output_strs)
@@ -87,29 +94,141 @@ def tokenize_prompt_and_output(
 
 
 
-
-
-
-
-
-
-import einops
-from jaxtyping import Float, Int, Bool
-
-
 # uv run pytest -k test_compute_entropy
 def compute_entropy(
     logits: Float[torch.Tensor,"batch_size sequence_length vocab_size"]
 ) -> Float[torch.Tensor,"batch_size sequence_length"]:
     """
-    Get the entropy of the next-token predictions (i.e., entropy over the vocabulary dimension).
+    给定一组logits，计算其对应概率分布的熵。默认前置维度包括b和s。实现中考虑了数值稳定性，避免softmax分母上溢。
     Args:
-        logits(torch.Tensor): Tensor of shape `(batch_size, sequence_length, vocab_size)` containing unnormalized logits.
+        logits(torch.Tensor): 形如`(batch_size, sequence_length, vocab_size)`，内含logits。
     Returns:
-        output(torch.Tensor): Shape `(batch_size, sequence_length)`. The entropy for each next-token prediction.
+        output(torch.Tensor): 形如`(batch_size, sequence_length)`，对每组logits对应的概率分布求出其熵。
     """
-    # 每个位置取对数，乘以自己的相反数，然后沿最后一维求和
-    neglogp = - torch.log(logits)
-    ent = einops.einsum(logits, neglogp, "b s v , b s v -> b s v")
-    res = einops.reduce(ent, "b s v -> b s", "sum")
+
+    max_logits = einops.reduce(logits,"b s v -> b s 1","max")   # b s 1
+    logits -= max_logits                                        # b s v
+    # 统一减去最大值，此后只使用这种形式计算
+    
+    exp = torch.exp(logits)                                     # b s v
+    sumexp = einops.reduce(exp,"b s v -> b s 1","sum")          # b s 1
+    prob = exp / sumexp                                         # b s v
+
+    logsumexp = torch.log(sumexp)                               # b s 1
+    logprob = logits - logsumexp                                # b s v
+
+    entropy_contrib = einops.einsum(-prob,logprob,"b s v, b s v -> b s v")
+    entropy = einops.reduce(entropy_contrib,"b s v -> b s","sum")
+
+    return entropy
+
+
+
+def compute_prob_given_id(
+    logits: Float[torch.Tensor,"batch_size sequence_length vocab_size"],
+    id: Int[torch.Tensor,"batch_size sequence_length"],
+) -> Float[torch.Tensor,"batch_size sequence_length"]:
+    """
+    给定一组logits，计算序号为id的token经softmax所得概率。默认前置维度包括b和s。实现中考虑了数值稳定性，避免softmax分母上溢。
+    Args:
+        logits(torch.Tensor): 形如`(batch_size, sequence_length, vocab_size)`，内含logits。
+        id(torch.Tensor): 形如`(batch_size, sequence_length)`，为每组logits指明要计算概率的位置。
+    Returns:
+        output(torch.Tensor): 形如`(batch_size, sequence_length)`，记录每组logits的第id个token对应的softmax所得概率。
+    """
+
+    max_logits = einops.reduce(logits,"b s v -> b s 1","max")   # b s 1
+    logits -= max_logits                                        # b s v
+    # 统一减去最大值，此后只使用这种形式计算
+    
+    exp = torch.exp(logits)                                     # b s v
+    sumexp = einops.reduce(exp,"b s v -> b s 1","sum")          # b s 1
+    logsumexp = torch.log(sumexp)                               # b s 1
+    logprob = logits - logsumexp                                # b s v
+
+    res = torch.gather(logprob, dim = 2, index = id.unsqueeze(-1)).squeeze(-1)
+
     return res
+
+
+# 测试：uv run pytest -k test_get_response_log_probs
+def get_response_log_probs(
+    model,#: PreTrainedModel,
+    input_ids: torch.Tensor,
+    labels: torch.Tensor,
+    return_token_entropy: bool = False,
+) -> dict[str, torch.Tensor]:
+    """
+    给定一组input-label，考察一个（因果）模型对每个input位置是否能正确预测出label。即：计算当前模型参数下，对于每个input位置，模型根据从头到该位置的input预测下一个token恰是该位置对应label的概率。顺便提供同时返回模型在每个位置预测的概率分布的熵的功能。
+    Args:
+        model(PreTrainedModel): 待评价的模型。(placed on the correct device and in inference mode if gradients should not be computed).
+        input_ids(torch.Tensor): 形如 `(batch_size, sequence_length)`，来自多组“问题+回答”对（去尾）。
+        labels(torch.Tensor): 形如 `(batch_size, sequence_length)`，来自多组“问题+回答”对（左移一位，即去头）。
+        return_token_entropy(bool): 若为 `True`，顺便同时返回每个位置预测分布的熵。应调用`compute_entropy`。
+    Returns:
+        output(dict[str, torch.Tensor]):
+        - "log_probs": 形如 `(batch_size, sequence_length)`，即条件概率 $log p_θ(x_t | x_{<t})$.
+        - "token_entropy": 可选，形如 `(batch_size, sequence_length)`，每个位置预测分布的熵 (只有`return_token_entropy=True`时返回此项).
+    """
+    # model(input_ids).logits 可以用于获得logits
+    logits = model(input_ids).logits
+    # print(logits)
+    # print(logits.size())
+    # print(labels)
+    # print(labels.size())
+    res = {}
+    res["log_probs"] = compute_prob_given_id(logits,labels)
+    print(res["log_probs"].size())
+    if return_token_entropy == True:
+        res["token_entropy"] = compute_entropy(logits)
+    return res
+
+
+# uv run pytest -k test_masked_normalize
+def masked_normalize(
+    tensor: torch.Tensor,
+    mask: torch.Tensor,
+    normalize_constant: float,
+    dim: int | None = None,
+) -> torch.Tensor:
+    """
+    Sum over a dimension and normalize by a constant, considering only those elements where `mask == 1`.
+    Args:
+        tensor(torch.Tensor): The tensor to sum and normalize.
+        mask(torch.Tensor): Same shape as `tensor`; positions with `1` are included in the sum.
+        normalize_constant(float): the constant to divide by for normalization.
+        dim(int | None): the dimension to sum along before normalization. If `None`, sum over all dimensions.
+    Returns:
+        output(torch.Tensor): the normalized sum, where masked elements (`mask == 0`) don’t contribute to the sum.
+    """
+    s = einops.einsum(tensor,mask,"..., ... -> ...")
+    if dim != None:
+        res = torch.sum(s,dim=dim,keepdim=False) / normalize_constant
+        return res
+    elif dim == None:
+        res = torch.sum(s) / normalize_constant
+        return res
+    
+
+# uv run pytest -k test_sft_microbatch_train_step
+def sft_microbatch_train_step(
+    policy_log_probs: Float[torch.Tensor,"batch_size, sequence_length"],
+    response_mask: Float[torch.Tensor,"batch_size, sequence_length"],
+    gradient_accumulation_steps: int,
+    normalize_constant: float = 1.0,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """
+    Execute a forward-and-backward pass on a microbatch.
+    Args:
+        policy_log_probs(Float[torch.Tensor,"batch_size, sequence_length"]): per-token log-probabilities from the SFT policy being trained.
+        response_mask(Float[torch.Tensor,"batch_size, sequence_length"]): 用1标出回复部分，问题和填充部分为0
+        gradient_accumulation_steps(int): Number of microbatches per optimizer step.
+        normalize_constant(float): 归一化常数，默认为1
+    Returns:
+        output(tuple[torch.Tensor, dict[str, torch.Tensor]]):
+        - loss: scalar tensor. The microbatch loss, adjusted for gradient accumulation. We return this so we can log it.
+        - metadata: Dict with metadata from the underlying loss call, and any other statistics you might want to log.
+    
+    
+    
+    """
