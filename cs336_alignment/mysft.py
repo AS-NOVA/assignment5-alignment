@@ -201,34 +201,35 @@ def masked_normalize(
     Returns:
         output(torch.Tensor): the normalized sum, where masked elements (`mask == 0`) don’t contribute to the sum.
     """
-    s = einops.einsum(tensor,mask,"..., ... -> ...")
-    if dim != None:
-        res = torch.sum(s,dim=dim,keepdim=False) / normalize_constant
-        return res
-    elif dim == None:
-        res = torch.sum(s) / normalize_constant
-        return res
+    s = (tensor * mask).sum(dim=dim) / normalize_constant
+    return s 
     
 
 # uv run pytest -k test_sft_microbatch_train_step
 def sft_microbatch_train_step(
-    policy_log_probs: Float[torch.Tensor,"batch_size, sequence_length"],
-    response_mask: Float[torch.Tensor,"batch_size, sequence_length"],
+    policy_log_probs: Float[torch.Tensor,"batch_size sequence_length"],
+    response_mask: Float[torch.Tensor,"batch_size sequence_length"],
     gradient_accumulation_steps: int,
     normalize_constant: float = 1.0,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """
     Execute a forward-and-backward pass on a microbatch.
     Args:
-        policy_log_probs(Float[torch.Tensor,"batch_size, sequence_length"]): per-token log-probabilities from the SFT policy being trained.
-        response_mask(Float[torch.Tensor,"batch_size, sequence_length"]): 用1标出回复部分，问题和填充部分为0
-        gradient_accumulation_steps(int): Number of microbatches per optimizer step.
+        policy_log_probs(Float[torch.Tensor,"batch_size sequence_length"]): 当前policy每个位置的logprob（其实就是交叉熵的相反数）
+        response_mask(Float[torch.Tensor,"batch_size sequence_length"]): 用1标出回复部分，问题和填充部分为0，最终只把mask部分加起来
+        gradient_accumulation_steps(int): 梯度累积的步数
         normalize_constant(float): 归一化常数，默认为1
     Returns:
         output(tuple[torch.Tensor, dict[str, torch.Tensor]]):
-        - loss: scalar tensor. The microbatch loss, adjusted for gradient accumulation. We return this so we can log it.
+        - loss: 单元素张量，loss（根据梯度累积调整过，即除以步数）
         - metadata: Dict with metadata from the underlying loss call, and any other statistics you might want to log.
-    
-    
-    
     """
+    b, l = policy_log_probs.size()
+    loss = - masked_normalize(
+        policy_log_probs, 
+        response_mask, normalize_constant=normalize_constant,
+        dim = None,
+    ) / (gradient_accumulation_steps * b)
+    # 为什么要对b平均？但总之这样是对的
+    loss.backward()
+    return loss.detach(), {}
