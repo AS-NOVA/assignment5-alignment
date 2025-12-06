@@ -190,7 +190,8 @@ def masked_mean(
 
 
 
-
+# uv run pytest -k test_grpo_microbatch_train_step
+# 抄的 但是懂了
 def grpo_microbatch_train_step(
     policy_log_probs: torch.Tensor,
     response_mask: torch.Tensor,
@@ -205,24 +206,41 @@ def grpo_microbatch_train_step(
     Execute a forward-and-backward pass on a microbatch.
 
     Args:
-        policy_log_probs:
+        policy_log_probs(torch.Tensor):
             (batch_size, sequence_length), per-token log-probabilities from the policy being trained.
-        response_mask:
+        response_mask(torch.Tensor):
             (batch_size, sequence_length), 1 for response tokens, 0 for prompt/padding.
-        gradient_accumulation_steps:
+        gradient_accumulation_steps(int):
             Number of microbatches per optimizer step.
-        loss_type:
+        loss_type(Literal):
             One of "no_baseline", "reinforce_with_baseline", "grpo_clip".
-        raw_rewards:
+        raw_rewards(torch.Tensor):
             Needed when loss_type == "no_baseline"; shape (batch_size, 1).
-        advantages Needed when loss_type != "no_baseline"; shape (batch_size, 1).
-        old_log_probs Required for GRPO-Clip; shape (batch_size, sequence_length).
-        cliprange Clip parameter ϵ for GRPO-Clip.
+        advantages(torch.Tensor):
+            Needed when loss_type != "no_baseline"; shape (batch_size, 1).
+        old_log_probs(torch.Tensor):
+            Required for GRPO-Clip; shape (batch_size, sequence_length).
+        cliprange(float):
+            Clip parameter ϵ for GRPO-Clip.
 
     Returns:
-        tuple[torch.Tensor, dict[str, torch.Tensor]].
-            loss scalar tensor. The microbatch loss, adjusted for gradient accumulation. We return
-            this so we can log it.
-            metadata Dict with metadata from the underlying loss call, and any other statistics you
-            might want to log.
+        output(tuple[torch.Tensor, dict[str, torch.Tensor]]):
+            - loss: scalar tensor. The microbatch loss, adjusted for gradient accumulation. We return this so we can log it.
+            - metadata: Dict with metadata from the underlying loss call, and any other statistics you might want to log.
     """
+    loss_per_token, metadata = compute_policy_gradient_loss(
+        policy_log_probs=policy_log_probs,
+        loss_type=loss_type,
+        raw_rewards=raw_rewards,
+        advantages=advantages,
+        old_log_probs=old_log_probs,
+        cliprange=cliprange,
+    )
+    masked_loss = masked_mean(
+        loss_per_token,
+        response_mask,
+        dim=None,
+    )
+    loss = masked_loss / (gradient_accumulation_steps)
+    loss.backward()
+    return (loss, metadata)

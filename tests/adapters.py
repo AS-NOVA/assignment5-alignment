@@ -250,6 +250,7 @@ def run_sft_microbatch_train_step(
         normalize_constant=normalize_constant,
     )
 
+# uv run pytest -k test_grpo_microbatch_train_step
 
 def run_grpo_microbatch_train_step(
     policy_log_probs: torch.Tensor,
@@ -287,7 +288,17 @@ def run_grpo_microbatch_train_step(
         tuple[torch.Tensor, dict[str, torch.Tensor]]: 
             the policy gradient loss and its metadata.
     """
-    raise NotImplementedError
+    res = grpo_microbatch_train_step(
+        policy_log_probs=policy_log_probs,
+        response_mask=response_mask,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        loss_type=loss_type,
+        raw_rewards=raw_rewards,
+        advantages=advantages,
+        old_log_probs=old_log_probs,
+        cliprange=cliprange,
+    )
+    return res
 
 # uv run pytest -k test_masked_normalize
 # passed

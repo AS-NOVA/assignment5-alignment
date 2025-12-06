@@ -227,9 +227,11 @@ def sft_microbatch_train_step(
     b, l = policy_log_probs.size()
     loss = - masked_normalize(
         policy_log_probs, 
-        response_mask, normalize_constant=normalize_constant,
+        response_mask,
+        normalize_constant=normalize_constant,
         dim = None,
     ) / (gradient_accumulation_steps * b)
-    # 为什么要对b平均？但总之这样是对的
+    # 对b平均，让loss刻画每个样本的平均表现
+    # 但是不对回答的序列长度平均，因为刻画的是整个序列的概率！
     loss.backward()
     return loss.detach(), {}
