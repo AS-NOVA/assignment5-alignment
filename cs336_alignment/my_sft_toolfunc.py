@@ -27,8 +27,6 @@ def read_jsonl(path:str)->Iterator[dict]:
                 yield json.loads(line)
 
 
-
-
 def get_qa_list(qaiter:Iterator)->list[dict[str,Any]]:
     """
     把迭代器里的qa读到列表里

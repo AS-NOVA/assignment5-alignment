@@ -8,8 +8,8 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
-from cs336_alignment.mysft import *
-from cs336_alignment.mygrpo import *
+from cs336_alignment.my_sft_utils import *
+from cs336_alignment.my_grpo_utils import *
 
 
 # uv run pytest -k test_tokenize_prompt_and_output
