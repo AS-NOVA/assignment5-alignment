@@ -107,7 +107,7 @@ def compute_entropy(
     """
 
     max_logits = einops.reduce(logits,"b s v -> b s 1","max")   # b s 1
-    logits -= max_logits                                        # b s v
+    logits = logits - max_logits                                # b s v
     # 统一减去最大值，此后只使用这种形式计算
     
     exp = torch.exp(logits)                                     # b s v
@@ -138,7 +138,7 @@ def compute_prob_given_id(
     """
 
     max_logits = einops.reduce(logits,"b s v -> b s 1","max")   # b s 1
-    logits -= max_logits                                        # b s v
+    logits = logits - max_logits                                # b s v
     # 统一减去最大值，此后只使用这种形式计算
     
     exp = torch.exp(logits)                                     # b s v
