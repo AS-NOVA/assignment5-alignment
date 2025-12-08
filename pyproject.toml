@@ -21,6 +21,7 @@ dependencies = [
     "wandb>=0.19.8",
     "xopen>=2.0.2",
     "jaxtyping>=0.3.0", # type hints for pytorch/jax/numpy
+    "peft<=0.15.0"  # 匹配transformers 4.51.3
 ]
 
 [tool.setuptools.packages.find]

@@ -1,0 +1,54 @@
+{
+  "os": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+  "python": "CPython 3.12.11",
+  "startedAt": "2025-12-07T16:13:57.292254Z",
+  "args": [
+    "--use_lora",
+    "--micro_batch_size",
+    "1",
+    "--gradient_accumulation_steps",
+    "8",
+    "--lr",
+    "2e-4",
+    "--epochs",
+    "1",
+    "--wandb_project",
+    "sft-local-test"
+  ],
+  "program": "/home/nova/cs336/assignment5-alignment/scripts/my_sft_train.py",
+  "codePath": "scripts/my_sft_train.py",
+  "git": {
+    "remote": "https://github.com/AS-NOVA/assignment5-alignment.git",
+    "commit": "1e65de8911cc48c5590ebcee0c79a44d5726bf7c"
+  },
+  "email": "asnova2002@gmail.com",
+  "root": "/home/nova/cs336/assignment5-alignment",
+  "host": "DESKTOP-UVPS2O0",
+  "executable": "/home/nova/cs336/assignment5-alignment/.venv/bin/python",
+  "codePathLocal": "scripts/my_sft_train.py",
+  "cpu_count": 8,
+  "cpu_count_logical": 16,
+  "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "gpu_count": 1,
+  "disk": {
+    "/": {
+      "total": "1081101176832",
+      "used": "77888344064"
+    }
+  },
+  "memory": {
+    "total": "12165775360"
+  },
+  "cpu": {
+    "count": 8,
+    "countLogical": 16
+  },
+  "gpu_nvidia": [
+    {
+      "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+      "memoryTotal": "8585740288",
+      "architecture": "Ada"
+    }
+  ],
+  "cudaVersion": "13.0"
+}

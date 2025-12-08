@@ -178,7 +178,7 @@ def get_response_log_probs(
     # print(labels.size())
     res = {}
     res["log_probs"] = compute_prob_given_id(logits,labels)
-    print(res["log_probs"].size())
+    # print(res["log_probs"].size())
     if return_token_entropy == True:
         res["token_entropy"] = compute_entropy(logits)
     return res

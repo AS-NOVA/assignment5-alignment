@@ -140,6 +140,7 @@ dependencies = [
     { name = "jupyter" },
     { name = "math-verify", extra = ["antlr4-13-2"] },
     { name = "notebook" },
+    { name = "peft" },
     { name = "pylatexenc" },
     { name = "pytest" },
     { name = "torch" },
@@ -160,6 +161,7 @@ requires-dist = [
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "math-verify", extras = ["antlr4-13-2"], specifier = ">=0.7.0" },
     { name = "notebook", specifier = ">=7.4.2" },
+    { name = "peft", specifier = "<=0.15.0" },
     { name = "pylatexenc", specifier = "==2.10" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "torch" },
@@ -2209,6 +2211,27 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/d1/81/74f6a65b848ffd16c18f920620ce999fe45fe27f01ab3911260ce4ed85e4/patsy-1.0.1.tar.gz", hash = "sha256:e786a9391eec818c054e359b737bbce692f051aee4c661f4141cc88fb459c0c4", size = 396010, upload-time = "2024-11-12T14:10:54.642Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/87/2b/b50d3d08ea0fc419c183a84210571eba005328efa62b6b98bc28e9ead32a/patsy-1.0.1-py2.py3-none-any.whl", hash = "sha256:751fb38f9e97e62312e921a1954b81e1bb2bcda4f5eeabaf94db251ee791509c", size = 232923, upload-time = "2024-11-12T14:10:52.85Z" },
+]
+
+[[package]]
+name = "peft"
+version = "0.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "accelerate" },
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "psutil" },
+    { name = "pyyaml" },
+    { name = "safetensors" },
+    { name = "torch" },
+    { name = "tqdm" },
+    { name = "transformers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c2/39/c6f7464cb137f7ffbffe9fd36d8b8b8feefb4e66390a372722d2f693e7d1/peft-0.15.0.tar.gz", hash = "sha256:6f0ac2f98d57a8b6ee49cef9f193a9d9d2beb9ac6347bdb995d306045a6bc6b0", size = 470909, upload-time = "2025-03-19T15:04:04.599Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/0a/01efce80e60ce8b11adc90ac9077e4fe3b0fa2f4b03aa459206588e8f7bc/peft-0.15.0-py3-none-any.whl", hash = "sha256:0dc90d13c6c111f4f9d3df5c7a34fcec5eee6f19713159622a5d9aacf3c670c6", size = 410774, upload-time = "2025-03-19T15:04:01.657Z" },
 ]
 
 [[package]]
