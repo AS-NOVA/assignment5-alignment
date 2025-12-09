@@ -102,5 +102,17 @@ python scripts/my_sft_train.py \
     --wandb_project "sft-local-test"
 ```
 
+全量微调
+
+```bash
+python scripts/my_sft_train.py \
+    --model_path "Qwen/Qwen2.5-Math-1.5B" \
+    --output_dir "checkpoint/sft_full"\
+    --micro_batch_size 1 \
+    --gradient_accumulation_steps 16 \
+    --lr 1e-5 \
+    --epochs 1 \
+    --wandb_project "sft-full-finetune"
+```
 
 

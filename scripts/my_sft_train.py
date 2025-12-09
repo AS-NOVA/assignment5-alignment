@@ -58,14 +58,13 @@ def parse_args():
     #       学习率 lr
     #       LoRA 开关 use_lora
     #       LoRA rank lora_rank
-
-    parser.add_argument("--lr", type=float, default=1e-5, help="学习率")
     parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
     parser.add_argument("--micro_batch_size", type=int, default=1, help="单次前向传播的样本数(受显存限制)")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=16, help="梯度累积步数")
     parser.add_argument("--max_seq_length", type=int, default=1024, help="序列最大长度，防止OOM")
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
-
+    parser.add_argument("--lr", type=float, default=1e-5, help="学习率")
+    
     parser.add_argument("--use_lora", action="store_true", help="是否使用 LoRA 微调")
     parser.add_argument("--lora_rank", type=int, default=16, help="LoRA Rank")
     
