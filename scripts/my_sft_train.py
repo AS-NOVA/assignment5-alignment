@@ -40,24 +40,39 @@ def parse_args():
     parser = argparse.ArgumentParser(description="SFT Training Script for Qwen-1.5B")
     
     # 路径配置
+    # - 模型：模型路径 model_path
+    # - 数据：数据文件 train_data, test_data
+    # - 存档：存档路径 output_dir
     parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B", help="本地模型路径")
     parser.add_argument("--train_data", type=str, default="data/gsm8k/train.jsonl", help="训练数据路径")
     parser.add_argument("--test_data", type=str, default="data/gsm8k/test.jsonl", help="验证数据路径")
     parser.add_argument("--output_dir", type=str, default="checkpoints/sft_run", help="模型保存目录")
     
     # 训练超参数
+    # - 随机：种子 seed
+    # - 数据投放：
+    #       数据集遍历次数 epochs，
+    #       理论 batch 大小 = micro_batch_size * gradient_accumulation_steps，
+    #       序列长度 max_seq_length
+    # - 优化器：
+    #       学习率 lr
+    #       LoRA 开关 use_lora
+    #       LoRA rank lora_rank
+
     parser.add_argument("--lr", type=float, default=1e-5, help="学习率")
     parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
-    parser.add_argument("--micro_batch_size", type=int, default=1, help="单卡单次前向传播的样本数(受显存限制)")
+    parser.add_argument("--micro_batch_size", type=int, default=1, help="单次前向传播的样本数(受显存限制)")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=16, help="梯度累积步数")
     parser.add_argument("--max_seq_length", type=int, default=1024, help="序列最大长度，防止OOM")
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
-    
-    # LoRA 配置开关
+
     parser.add_argument("--use_lora", action="store_true", help="是否使用 LoRA 微调")
     parser.add_argument("--lora_rank", type=int, default=16, help="LoRA Rank")
     
-    # Wandb
+    # Wandb 记录
+    # - 名称：
+    #       项目名 wandb_project
+    #       运行名 wandb_run_name
     parser.add_argument("--wandb_project", type=str, default="cs336-sft", help="Wandb 项目名")
     parser.add_argument("--wandb_run_name", type=str, default=None, help="Wandb Run 名")
 
