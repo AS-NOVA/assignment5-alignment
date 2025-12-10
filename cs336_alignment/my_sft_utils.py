@@ -213,7 +213,12 @@ def sft_microbatch_train_step(
     normalize_constant: float = 1.0,
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     """
-    Execute a forward-and-backward pass on a microbatch.
+    假设一个 micro batch 已经前向传播并得到一组对数概率（等于每个位置的交叉熵），我们配合 mask 信息计算出该 micro batch 的 loss 并反向传播。由于使用梯度累积，所以这里不应进行梯度清零操作。
+
+    注意，在 sft 中，我们希望模型能够正确生成整个回答，所以一般将单个样本的 loss 设定为每个 token 的负对数概率之和，这正等于整个序列的负对数概率。所以，一个 batch 的 loss 不应对序列中的 token 平均，而只对 batch 平均。
+    
+    然而， 由于使用梯度累积，逻辑上的真实 batch_size 实际是 micro_batch 的大小与梯度累积步数之积。所以为了正确地将 loss 对 batch 平均，我们已经预先除掉了这个乘积。
+
     Args:
         policy_log_probs(Float[torch.Tensor,"batch_size sequence_length"]): 当前policy每个位置的logprob（其实就是交叉熵的相反数）
         response_mask(Float[torch.Tensor,"batch_size sequence_length"]): 用1标出回复部分，问题和填充部分为0，最终只把mask部分加起来

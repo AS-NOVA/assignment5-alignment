@@ -96,7 +96,7 @@ python scripts/my_sft_train.py \
     --model_path "Qwen/Qwen2.5-Math-1.5B" \
     --use_lora \
     --micro_batch_size 1 \
-    --gradient_accumulation_steps 8 \
+    --gradient_acc_steps 8 \
     --lr 2e-4 \
     --epochs 1 \
     --wandb_project "sft-local-test"
@@ -109,7 +109,7 @@ python scripts/my_sft_train.py \
     --model_path "Qwen/Qwen2.5-Math-1.5B" \
     --output_dir "checkpoint/sft_full"\
     --micro_batch_size 1 \
-    --gradient_accumulation_steps 16 \
+    --gradient_acc_steps 16 \
     --lr 1e-5 \
     --epochs 1 \
     --wandb_project "sft-full-finetune"

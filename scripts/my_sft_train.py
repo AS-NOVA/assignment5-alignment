@@ -34,105 +34,94 @@ from cs336_alignment.my_sft_toolfunc import (
 )
 
 # =============================================================================
-# 1. 配置与参数解析 (Configuration)
+# 1. 配置与参数解析
 # =============================================================================
 def parse_args():
     parser = argparse.ArgumentParser(description="SFT Training Script for Qwen-1.5B")
     
-    # 路径配置
-    # - 模型：模型路径 model_path
-    # - 数据：数据文件 train_data, test_data
-    # - 存档：存档路径 output_dir
-    parser.add_argument("--model_path", type=str, default="models/Qwen2.5-Math-1.5B", help="本地模型路径")
-    parser.add_argument("--train_data", type=str, default="data/gsm8k/train.jsonl", help="训练数据路径")
-    parser.add_argument("--test_data", type=str, default="data/gsm8k/test.jsonl", help="验证数据路径")
-    parser.add_argument("--output_dir", type=str, default="checkpoints/sft_run", help="模型保存目录")
+    # 路径配置：模型，数据，存档
+    parser.add_argument("--model_path", type=str,   default="models/Qwen2.5-Math-1.5B", help="模型名称或本地路径")
+    parser.add_argument("--train_data", type=str,   default="data/gsm8k/train.jsonl",   help="训练数据路径")
+    parser.add_argument("--test_data",  type=str,   default="data/gsm8k/test.jsonl",    help="验证数据路径")
+    parser.add_argument("--output_dir", type=str,   default="checkpoints/sft_run",      help="模型保存目录")
     
-    # 训练超参数
-    # - 随机：种子 seed
-    # - 数据投放：
-    #       数据集遍历次数 epochs，
-    #       理论 batch 大小 = micro_batch_size * gradient_accumulation_steps，
-    #       序列长度 max_seq_length
-    # - 优化器：
-    #       学习率 lr
-    #       LoRA 开关 use_lora
-    #       LoRA rank lora_rank
-    parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
-    parser.add_argument("--micro_batch_size", type=int, default=1, help="单次前向传播的样本数(受显存限制)")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=16, help="梯度累积步数")
-    parser.add_argument("--max_seq_length", type=int, default=1024, help="序列最大长度，防止OOM")
-    parser.add_argument("--seed", type=int, default=42, help="随机种子")
-    parser.add_argument("--lr", type=float, default=1e-5, help="学习率")
+    # 训练超参数：数据投放（epoch，batch），序列长度，学习率，lora（rank）
+    parser.add_argument("--seed",               type=int,   default=42,     help="随机种子")
+    parser.add_argument("--epochs",             type=int,   default=1,      help="训练轮数")
+    parser.add_argument("--micro_batch_size",   type=int,   default=1,      help="单次前向传播的样本数(当显存受限时应设置为较小的值)")
+    parser.add_argument("--gradient_acc_steps", type=int,   default=16,     help="梯度累积步数")
+    parser.add_argument("--max_seq_length",     type=int,   default=1024,   help="序列最大长度，防止显存溢出")
+    parser.add_argument("--lr",                 type=float, default=1e-5,   help="学习率")
     
-    parser.add_argument("--use_lora", action="store_true", help="是否使用 LoRA 微调")
-    parser.add_argument("--lora_rank", type=int, default=16, help="LoRA Rank")
+    parser.add_argument("--use_lora",           action="store_true",        help="是否使用 LoRA 微调")
+    parser.add_argument("--lora_rank",          type=int,   default=16,     help="LoRA 秩")
     
     # Wandb 记录
-    # - 名称：
-    #       项目名 wandb_project
-    #       运行名 wandb_run_name
-    parser.add_argument("--wandb_project", type=str, default="cs336-sft", help="Wandb 项目名")
-    parser.add_argument("--wandb_run_name", type=str, default=None, help="Wandb Run 名")
+    parser.add_argument("--wandb_project",      type=str, default="qwen-math 1.5b sft", help="Wandb 项目名")
+    parser.add_argument("--wandb_run_name",     type=str, default=None,                 help="Wandb Run 名")
 
     args = parser.parse_args()
     return args
 
 def set_seed(seed):
-    """固定随机种子，保证可复现性"""
+    """把random、np.random、torch的随机函数的种子都设置成指定的同一个"""
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
 # =============================================================================
-# 2. 模型与分词器工厂 (Model Factory)
+# 2. 获取 model 与 tokenizer
 # =============================================================================
 def get_model_and_tokenizer(args, device):
+    """
+    从指定名称或路径加载右 padding 分词器，再加载 bf16 模型到指定 device
+    
+    同时可按参数选择是否使用 LoRA
+    """
     print(f"正在加载分词器: {args.model_path}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
     
 
-    # 显式设置 padding_side 为 right，虽然你的代码逻辑支持右填充，但明确设置更安全
+    # 显式设置右填充
     tokenizer.padding_side = "right"
-    # 确保 pad_token 存在
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    # # 确保 pad_token 存在
+    # if tokenizer.pad_token is None:
+    #     tokenizer.pad_token = tokenizer.eos_token
         
     print(f"正在加载模型: {args.model_path}")
-    # 使用 bfloat16 以节省显存并保持精度 (40系显卡支持 bf16)
+    # 使用 bf16 ，并将模型加载到 device
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
         torch_dtype=torch.bfloat16,
         trust_remote_code=True
     ).to(device)
 
-    # 显存优化策略：LoRA
+    # 可选：LoRA，本地测试最好使用
     if args.use_lora:
-        print("⚡ 启用 LoRA 模式...")
+        print("⚡ 当前使用 LoRA ")
         peft_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             inference_mode=False,
             r=args.lora_rank,
-            lora_alpha=32,
+            lora_alpha=2*args.lora_rank,
             lora_dropout=0.1,
-            # 针对 Qwen/Llama 的常见线性层
             target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
         )
         model = get_peft_model(model, peft_config)
         model.print_trainable_parameters() # 打印一下到底训了多少参数
     else:
-        print("🔥 启用全量微调模式 (注意显存)...")
-        # 如果全量微调，建议开启梯度检查点以节省显存
+        print("🔥 当前全量微调，未使用 LoRA")
+        # 开启梯度检查点以节省显存
         model.gradient_checkpointing_enable()
 
     return model, tokenizer
 
 # =============================================================================
-# 3. 数据管道工厂 (Data Factory)
+# 3. 制作 Dataset 与 DataLoader（注意：由于使用梯度累积，加载器加载的是 micro batch ）
 # =============================================================================
 class SFTDataset(Dataset):
-    """简单的 Dataset 包装器，配合 DataLoader 使用"""
+    """本项目的Dataset子类，封装list形式的原始sft数据"""
     def __init__(self, data_list):
         self.data = data_list
     
@@ -150,29 +139,28 @@ def get_dataloaders(args, tokenizer):
     
     print(f"训练集大小: {len(train_data)}, 验证集大小: {len(val_data)}")
 
-    # 定义 Collate Function：这是连接数据和模型的关键
-    # 它负责把一个 batch 的 raw data 转换成 tensor
+    # 自定义 Collate Function：
+    # 将从原始数据中采集的一个 list 经过指定的处理方式，转化为能够直接输入模型的 tensor
     def collate_fn(batch):
-        # batch 是一个 list of dict: [{"question": "...", "answer": "..."}, ...]
+        # batch 形如 list[dict[str,str]]，其中 dict 形如 {"question":"xxx", "answer":"yyy"}
         prompts = [item["question"] for item in batch]
         responses = [item["answer"] for item in batch]
         
-        # 调用你写好的 tokenize_prompt_and_output
-        # 注意：这里使用的是 Right Padding，这对于 SFT 训练是没问题的
+        # 使用预先写好的 tokenize_prompt_and_output
+        # 将问答对经过分词和右侧 padding ，处理为 input_ids labels response_mask 这三个 tensor
         encoded_batch = tokenize_prompt_and_output(
             prompt_strs=prompts,
             output_strs=responses,
             tokenizer=tokenizer
         )
         
-        # 简单的长度截断保护 (虽然你之前说 GSM8K 不长，但加上更稳健)
-        # 如果超过 max_seq_length，进行切片
-        max_len = args.max_seq_length
-        if encoded_batch["input_ids"].shape[1] > max_len:
-            encoded_batch["input_ids"] = encoded_batch["input_ids"][:, :max_len]
-            encoded_batch["labels"] = encoded_batch["labels"][:, :max_len]
-            encoded_batch["response_mask"] = encoded_batch["response_mask"][:, :max_len]
-            
+#         # 截断超出设定的 max_seq_length 的部分
+#         max_len = args.max_seq_length
+#         if encoded_batch["input_ids"].shape[1] > max_len:
+#             encoded_batch["input_ids"] = encoded_batch["input_ids"][:, :max_len]
+#             encoded_batch["labels"] = encoded_batch["labels"][:, :max_len]
+#             encoded_batch["response_mask"] = encoded_batch["response_mask"][:, :max_len]
+        
         return encoded_batch
 
     # 创建 DataLoader
@@ -183,7 +171,8 @@ def get_dataloaders(args, tokenizer):
         collate_fn=collate_fn
     )
     
-    # 验证集通常不需要 shuffle，batch size 可以稍微大一点（如果不做反向传播）
+    # 验证集也有自己的 DataLoader ，区别是可以不需要 shuffle
+    # 或许 batch size 可以再大一点？目前没有做区分
     val_loader = DataLoader(
         SFTDataset(val_data), 
         batch_size=args.micro_batch_size, 
@@ -196,43 +185,43 @@ def get_dataloaders(args, tokenizer):
 # =============================================================================
 # 4. 验证与保存逻辑 (Eval & Save)
 # =============================================================================
-def evaluate(model, val_loader, device):
-    """验证集评估函数：只计算 Loss，不进行生成"""
-    model.eval()
-    total_loss = 0
-    total_steps = 0
+# def evaluate(model, val_loader, device):
+#     """验证集评估函数：只计算 Loss，不进行生成"""
+#     model.eval()
+#     total_loss = 0
+#     total_steps = 0
     
-    print("正在进行验证集评估...")
-    with torch.no_grad():
-        for batch in tqdm(val_loader, desc="Evaluating"):
-            # 1. 数据上卡
-            input_ids = batch["input_ids"].to(device)
-            labels = batch["labels"].to(device)
-            response_mask = batch["response_mask"].to(device)
+#     print("正在进行验证集评估...")
+#     with torch.no_grad():
+#         for batch in tqdm(val_loader, desc="Evaluating"):
+#             # 1. 数据上卡
+#             input_ids = batch["input_ids"].to(device)
+#             labels = batch["labels"].to(device)
+#             response_mask = batch["response_mask"].to(device)
             
-            # 2. 计算 Logits
-            # 注意：get_response_log_probs 内部调用了 model(input_ids)
-            log_probs_dict = get_response_log_probs(model, input_ids, labels)
-            policy_log_probs = log_probs_dict["log_probs"]
+#             # 2. 计算 Logits
+#             # 注意：get_response_log_probs 内部调用了 model(input_ids)
+#             log_probs_dict = get_response_log_probs(model, input_ids, labels)
+#             policy_log_probs = log_probs_dict["log_probs"]
             
-            # 3. 计算 Loss
-            # 这里我们不调用 sft_microbatch_train_step，因为它包含 backward
-            # 我们直接调用 masked_normalize 计算纯 loss
-            # 注意：验证时不涉及梯度累积，所以不需要除以 accumulation steps
-            # 直接计算这个 batch 的平均 loss
-            loss = -masked_normalize(
-                policy_log_probs,
-                response_mask,
-                normalize_constant=1.0, # 默认为 1
-                dim=None
-            ) / input_ids.shape[0] # 除以 batch_size 得到平均 loss
+#             # 3. 计算 Loss
+#             # 这里我们不调用 sft_microbatch_train_step，因为它包含 backward
+#             # 我们直接调用 masked_normalize 计算纯 loss
+#             # 注意：验证时不涉及梯度累积，所以不需要除以 accumulation steps
+#             # 直接计算这个 batch 的平均 loss
+#             loss = -masked_normalize(
+#                 policy_log_probs,
+#                 response_mask,
+#                 normalize_constant=1.0, # 默认为 1
+#                 dim=None
+#             ) / input_ids.shape[0] # 除以 batch_size 得到平均 loss
             
-            total_loss += loss.item()
-            total_steps += 1
+#             total_loss += loss.item()
+#             total_steps += 1
             
-    avg_loss = total_loss / total_steps
-    model.train() # 切回训练模式
-    return avg_loss
+#     avg_loss = total_loss / total_steps
+#     model.train() # 切回训练模式
+#     return avg_loss
 
 def save_checkpoint(model, tokenizer, args, step_or_epoch):
     """保存模型：兼容 LoRA 和全量"""
@@ -245,98 +234,81 @@ def save_checkpoint(model, tokenizer, args, step_or_epoch):
     # 保存 tokenizer
     tokenizer.save_pretrained(save_path)
     
-    # 保存模型
-    if args.use_lora:
-        # LoRA 模式下，save_pretrained 只会保存 adapter 权重 (很小)
-        model.save_pretrained(save_path)
-    else:
-        # 全量模式下，保存完整权重
-        model.save_pretrained(save_path)
+    # 保存模型（无论是否使用 LoRA）
+    model.save_pretrained(save_path)
     print("保存完成。")
 
 # =============================================================================
-# 5. 主训练循环 (Main Logic)
+# 5. 构建完整流程，具体制定训练循环
 # =============================================================================
 def main(args):
-    # 1. 初始化环境
+    # 1. 初始化环境：种子，设备，wandb
     set_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"使用设备: {device}")
-    
-    # 初始化 Wandb
     wandb.init(project=args.wandb_project, name=args.wandb_run_name, config=args)
     
-    # 2. 准备组件
+    # 2. 准备组件：模型，分词器，数据加载器，优化器
     model, tokenizer = get_model_and_tokenizer(args, device)
     train_loader, val_loader = get_dataloaders(args, tokenizer)
     
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
-    
-    # 简单的学习率调度器 (Linear Warmup + Decay 可以后续再加，先用简单的)
-    # scheduler = ... 
-    
+    optimizer.zero_grad()   # 清空梯度
+
     # 3. 训练循环
-    global_step = 0
-    optimizer.zero_grad()
-    accumulated_loss = 0.0 # 用于记录一个大 Batch 的 loss (用于 Wandb)
+    big_step = 0    # 记录逻辑 batch 的步数
+    big_loss = 0.0  # 记录逻辑 batch 的 loss （ micro_batch 之间无优化器步进，持续观察 micro_loss 不合适，应当累加）
     
     print(f"开始训练，总轮数: {args.epochs}")
     for epoch in range(args.epochs):
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}")
         
-        for step, batch in enumerate(progress_bar):
-            # --- A. 数据上卡 ---
-            input_ids = batch["input_ids"].to(device)
-            labels = batch["labels"].to(device)
-            response_mask = batch["response_mask"].to(device)
+        for micro_step, micro_batch in enumerate(progress_bar):
+            # batch 是从 train_loader 中取出的，遍历它即可获得每个 micro_batch 要用到的数据
+
+            # --- 搬运数据 ---
+            input_ids = micro_batch["input_ids"].to(device)
+            labels = micro_batch["labels"].to(device)
+            response_mask = micro_batch["response_mask"].to(device)
             
-            # --- B. 前向传播 (计算 Logits) ---
-            # 使用你写的函数：获得 p(label|input)
+            # --- 前向传播，获得对数概率 ---
             log_probs_dict = get_response_log_probs(model, input_ids, labels)
             policy_log_probs = log_probs_dict["log_probs"]
             
-            # --- C. 反向传播 (Microbatch Step) ---
-            # 使用你写的函数：计算 Loss 并 Backward
-            # 注意：sft_microbatch_train_step 内部已经除以了 gradient_accumulation_steps
-            # 并执行了 loss.backward()
-            loss_micro, _ = sft_microbatch_train_step(
+            # --- 计算 loss，反向传播 ---
+            micro_loss, _ = sft_microbatch_train_step(
                 policy_log_probs=policy_log_probs,
                 response_mask=response_mask,
-                gradient_accumulation_steps=args.gradient_accumulation_steps
+                gradient_accumulation_steps=args.gradient_acc_steps
             )
+            big_loss += micro_loss.item()
             
-            # --- D. Loss 记录逻辑 ---
-            # 因为 loss_micro 已经是 (L_total / Acc / B)
-            # 我们直接累加它：Sum(loss_micro) = Sum(L_total / B) / Acc = Avg_Loss_Global
-            # 所以这里不需要再除以 Acc，直接加即可。
-            accumulated_loss += loss_micro.item()
-            
-            # --- E. 梯度更新 (Gradient Update) ---
-            if (step + 1) % args.gradient_accumulation_steps == 0:
+            # --- 梯度累积达到一定步数，逻辑 batch 结束 ---
+            # 每个 batch 运行完的工作：报告 loss，优化器移动一步，清空梯度，记录日志信息等
+            if (micro_step + 1) % args.gradient_acc_steps == 0:
                 # 梯度裁剪 (防止梯度爆炸)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
                 optimizer.zero_grad()
                 
                 # 记录到 Wandb
                 wandb.log({
-                    "train/loss": accumulated_loss, 
-                    "train/epoch": epoch + (step + 1) / len(train_loader),
-                    "global_step": global_step
+                    "train/loss": big_loss, 
+                    "train/epoch": epoch + (micro_step + 1) / len(train_loader),
+                    "big_step": big_step
                 })
                 
                 # 更新进度条
-                progress_bar.set_postfix({"loss": accumulated_loss})
+                progress_bar.set_postfix({"loss": big_loss})
                 
                 # 重置累积器
-                accumulated_loss = 0.0
-                global_step += 1
+                big_loss = 0.0
+                big_step += 1
                 
         # --- F. 每个 Epoch 结束后验证与保存 ---
-        val_loss = evaluate(model, val_loader, device)
-        print(f"Epoch {epoch+1} 验证集 Loss: {val_loss:.4f}")
-        wandb.log({"eval/loss": val_loss, "eval/epoch": epoch + 1})
+        # val_loss = evaluate(model, val_loader, device)
+        # print(f"Epoch {epoch+1} 验证集 Loss: {val_loss:.4f}")
+        # wandb.log({"eval/loss": val_loss, "eval/epoch": epoch + 1})
         
         save_checkpoint(model, tokenizer, args, f"epoch-{epoch+1}")
 
