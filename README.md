@@ -77,14 +77,23 @@ uv sync
 
 本地下载较为麻烦，考虑先直接用hf库的缓存功能。
 
-首先设置镜像站，将`HF_ENDPOINT`设置为镜像站，并且写到.bashrc中：
+首先设置镜像站，将`HF_ENDPOINT`设置为镜像站，并且写到`~/.bashrc`中：
 
 ```bash
 echo 'export HF_ENDPOINT="https://hf-mirror.com"' >> ~/.bashrc
 ```
 
+另外，在autodl上，如果担心hf把模型缓存到系统盘，导致空间不足，可以设置将模型默认缓存至数据盘：
 
+```bash
+echo 'export HF_HOME="/root/autodl-tmp/hf_cache"' >> ~/.bashrc
+```
 
+无论往`~/.bashrc`中写了什么，记得刷新配置
+
+```bash
+source ~/.bashrc
+```
 
 
 ## 运行脚本
@@ -107,7 +116,7 @@ python scripts/my_sft_train.py \
 ```bash
 python scripts/my_sft_train.py \
     --model_path "Qwen/Qwen2.5-Math-1.5B" \
-    --output_dir "checkpoint/sft_full"\
+    --output_dir "checkpoints/sft_full"\
     --micro_batch_size 1 \
     --gradient_acc_steps 16 \
     --lr 1e-5 \

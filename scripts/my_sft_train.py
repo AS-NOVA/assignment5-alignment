@@ -4,6 +4,7 @@
 import os
 import argparse
 import random
+import json
 
 # 数值计算与深度学习
 import numpy as np
@@ -62,6 +63,28 @@ def parse_args():
 
     args = parser.parse_args()
     return args
+
+def confirm_args(args):
+    print("="*30 + " 参数配置 " + "="*30)
+    print(json.dumps(vars(args), indent=4, ensure_ascii=False))
+    print("="*70)
+    while True:
+        try:
+            choice = input("\n>>> 确认上述参数并运行? [y/n]: ").strip().lower()
+            if choice == 'y':
+                print("参数确认，开始运行...")
+                break
+            elif choice == 'n':
+                print("已取消运行")
+                exit(0)
+            else:
+                print("输入无效，请输入 'y' 确认或 'n' 取消")
+        except KeyboardInterrupt:
+            print("\n强制退出")
+            exit(0)
+
+def get_real_output_path(args):
+    print("hi!hello！")
 
 def set_seed(seed):
     """把random、np.random、torch的随机函数的种子都设置成指定的同一个"""
@@ -320,4 +343,5 @@ def main(args):
 # =============================================================================
 if __name__ == "__main__":
     args = parse_args()
+    confirm_args(args)
     main(args)
