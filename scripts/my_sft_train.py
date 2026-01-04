@@ -5,6 +5,7 @@ import os
 import argparse
 import random
 import json
+from datetime import datetime
 
 # 数值计算与深度学习
 import numpy as np
@@ -84,7 +85,7 @@ def confirm_args(args):
             exit(0)
 
 def get_real_output_path(args):
-    print("hi!hello！")
+    print("hei")
 
 def set_seed(seed):
     """把random、np.random、torch的随机函数的种子都设置成指定的同一个"""
