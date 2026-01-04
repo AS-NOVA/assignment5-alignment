@@ -84,8 +84,13 @@ def confirm_args(args):
             print("\n强制退出")
             exit(0)
 
-def get_real_output_path(args):
-    print("hei")
+def get_time_str():
+    now = datetime.now()
+    time_str = now.strftime("%Y%m%d_%H%M%S")
+    return time_str
+
+def test():
+    print("hi!")
 
 def set_seed(seed):
     """把random、np.random、torch的随机函数的种子都设置成指定的同一个"""
@@ -343,6 +348,9 @@ def main(args):
 # 入口
 # =============================================================================
 if __name__ == "__main__":
+    # 先获取开始执行时的时间
+    start_time = get_time_str()
     args = parse_args()
     confirm_args(args)
+
     main(args)
