@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # 基本库
 import os
 import argparse
@@ -39,6 +37,7 @@ from cs336_alignment.my_sft_toolfunc import (
 # 1. 配置与参数解析
 # =============================================================================
 def parse_args():
+    # 使用 argparse.ArgumentParser 设定可用的命令行参数
     parser = argparse.ArgumentParser(description="SFT Training Script for Qwen-1.5B")
     
     # 路径配置：模型，数据，存档
@@ -46,7 +45,11 @@ def parse_args():
     parser.add_argument("--train_data", type=str,   default="data/gsm8k/train.jsonl",   help="训练数据路径")
     parser.add_argument("--test_data",  type=str,   default="data/gsm8k/test.jsonl",    help="验证数据路径")
     parser.add_argument("--output_dir", type=str,   default="checkpoints/sft_run",      help="模型保存目录")
-    
+
+    # Wandb 记录
+    parser.add_argument("--wandb_project",      type=str, default="qwen-math 1.5b sft", help="Wandb 项目名")
+    parser.add_argument("--wandb_run_name",     type=str, default=None,                 help="Wandb Run 名")
+
     # 训练超参数：数据投放（epoch，batch），序列长度，学习率，lora（rank）
     parser.add_argument("--seed",               type=int,   default=42,     help="随机种子")
     parser.add_argument("--epochs",             type=int,   default=1,      help="训练轮数")
@@ -58,10 +61,6 @@ def parse_args():
     parser.add_argument("--use_lora",           action="store_true",        help="是否使用 LoRA 微调")
     parser.add_argument("--lora_rank",          type=int,   default=16,     help="LoRA 秩")
     
-    # Wandb 记录
-    parser.add_argument("--wandb_project",      type=str, default="qwen-math 1.5b sft", help="Wandb 项目名")
-    parser.add_argument("--wandb_run_name",     type=str, default=None,                 help="Wandb Run 名")
-
     args = parser.parse_args()
     return args
 
@@ -88,9 +87,6 @@ def get_time_str():
     now = datetime.now()
     time_str = now.strftime("%Y%m%d_%H%M%S")
     return time_str
-
-def test():
-    print("hi!")
 
 def set_seed(seed):
     """把random、np.random、torch的随机函数的种子都设置成指定的同一个"""
@@ -254,7 +250,7 @@ def get_dataloaders(args, tokenizer):
 
 def save_checkpoint(model, tokenizer, args, step_or_epoch):
     """保存模型：兼容 LoRA 和全量"""
-    save_path = os.path.join(args.output_dir, f"checkpoint-{step_or_epoch}")
+    save_path = os.path.join(args.output_dir, args.start_time, f"{args.save_time}_checkpoint-{step_or_epoch}")
     print(f"正在保存模型到: {save_path}")
     
     if not os.path.exists(save_path):
@@ -338,6 +334,9 @@ def main(args):
         # val_loss = evaluate(model, val_loader, device)
         # print(f"Epoch {epoch+1} 验证集 Loss: {val_loss:.4f}")
         # wandb.log({"eval/loss": val_loss, "eval/epoch": epoch + 1})
+
+        save_time_str = get_time_str()
+        args.save_time = save_time_str
         
         save_checkpoint(model, tokenizer, args, f"epoch-{epoch+1}")
 
@@ -348,9 +347,9 @@ def main(args):
 # 入口
 # =============================================================================
 if __name__ == "__main__":
-    # 先获取开始执行时的时间
-    start_time = get_time_str()
+    start_time_str = get_time_str()
     args = parse_args()
+    args.start_time = start_time_str
     confirm_args(args)
 
     main(args)
