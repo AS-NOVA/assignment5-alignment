@@ -164,9 +164,12 @@ def get_dataloaders(args, tokenizer):
     print("正在读取数据...")
     # 使用你写的 read_jsonl 读取数据
     train_data = get_qa_list(read_jsonl(args.train_data))
+    l = len(train_data)
+    new_l = int(l * args.train_set_ratio)
+    train_data = train_data[:new_l]
     val_data = get_qa_list(read_jsonl(args.test_data))
     
-    print(f"训练集大小: {len(train_data)}, 验证集大小: {len(val_data)}")
+    print(f"原始训练集大小: {l}, 训练集采样率: {args.train_set_ratio}, 实际训练集大小: {len(train_data)}, 验证集大小: {len(val_data)}")
 
     # 自定义 Collate Function：
     # 将从原始数据中采集的一个 list 经过指定的处理方式，转化为能够直接输入模型的 tensor
@@ -214,43 +217,43 @@ def get_dataloaders(args, tokenizer):
 # =============================================================================
 # 4. 验证与保存逻辑 (Eval & Save)
 # =============================================================================
-# def evaluate(model, val_loader, device):
-#     """验证集评估函数：只计算 Loss，不进行生成"""
-#     model.eval()
-#     total_loss = 0
-#     total_steps = 0
+def evaluate(model, val_loader, device):
+    """验证集评估函数：只计算 Loss，不进行生成"""
+    model.eval()
+    total_loss = 0
+    total_steps = 0
     
-#     print("正在进行验证集评估...")
-#     with torch.no_grad():
-#         for batch in tqdm(val_loader, desc="Evaluating"):
-#             # 1. 数据上卡
-#             input_ids = batch["input_ids"].to(device)
-#             labels = batch["labels"].to(device)
-#             response_mask = batch["response_mask"].to(device)
+    print("正在进行验证集评估...")
+    with torch.no_grad():
+        for batch in tqdm(val_loader, desc="Evaluating"):
+            # 1. 数据上卡
+            input_ids = batch["input_ids"].to(device)
+            labels = batch["labels"].to(device)
+            response_mask = batch["response_mask"].to(device)
             
-#             # 2. 计算 Logits
-#             # 注意：get_response_log_probs 内部调用了 model(input_ids)
-#             log_probs_dict = get_response_log_probs(model, input_ids, labels)
-#             policy_log_probs = log_probs_dict["log_probs"]
+            # 2. 计算 Logits
+            # 注意：get_response_log_probs 内部调用了 model(input_ids)
+            log_probs_dict = get_response_log_probs(model, input_ids, labels)
+            policy_log_probs = log_probs_dict["log_probs"]
             
-#             # 3. 计算 Loss
-#             # 这里我们不调用 sft_microbatch_train_step，因为它包含 backward
-#             # 我们直接调用 masked_normalize 计算纯 loss
-#             # 注意：验证时不涉及梯度累积，所以不需要除以 accumulation steps
-#             # 直接计算这个 batch 的平均 loss
-#             loss = -masked_normalize(
-#                 policy_log_probs,
-#                 response_mask,
-#                 normalize_constant=1.0, # 默认为 1
-#                 dim=None
-#             ) / input_ids.shape[0] # 除以 batch_size 得到平均 loss
+            # 3. 计算 Loss
+            # 这里我们不调用 sft_microbatch_train_step，因为它包含 backward
+            # 我们直接调用 masked_normalize 计算纯 loss
+            # 注意：验证时不涉及梯度累积，所以不需要除以 accumulation steps
+            # 直接计算这个 batch 的平均 loss
+            loss = -masked_normalize(
+                policy_log_probs,
+                response_mask,
+                normalize_constant=1.0, # 默认为 1
+                dim=None
+            ) / input_ids.shape[0] # 除以 batch_size 得到平均 loss
             
-#             total_loss += loss.item()
-#             total_steps += 1
+            total_loss += loss.item()
+            total_steps += 1
             
-#     avg_loss = total_loss / total_steps
-#     model.train() # 切回训练模式
-#     return avg_loss
+    avg_loss = total_loss / total_steps
+    model.train() # 切回训练模式
+    return avg_loss
 
 def save_checkpoint(model, tokenizer, args, step_or_epoch):
     """保存模型：兼容 LoRA 和全量"""
@@ -335,9 +338,9 @@ def main(args):
                 big_step += 1
                 
         # --- F. 每个 Epoch 结束后验证与保存 ---
-        # val_loss = evaluate(model, val_loader, device)
-        # print(f"Epoch {epoch+1} 验证集 Loss: {val_loss:.4f}")
-        # wandb.log({"eval/loss": val_loss, "eval/epoch": epoch + 1})
+        val_loss = evaluate(model, val_loader, device)
+        print(f"Epoch {epoch+1} 验证集 Loss: {val_loss:.4f}")
+        wandb.log({"eval/loss": val_loss, "eval/epoch": epoch + 1})
         
         save_checkpoint(model, tokenizer, args, f"epoch-{epoch+1}")
 
@@ -351,6 +354,10 @@ if __name__ == "__main__":
     # 先获取开始执行时的时间
     start_time = get_time_str()
     args = parse_args()
+
+    # 允许非全量训练
+    args.train_set_ratio = 0.5
+
     confirm_args(args)
 
     main(args)
