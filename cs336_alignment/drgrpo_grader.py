@@ -1011,8 +1011,8 @@ def r1_zero_reward_fn(response:str,
                       )->dict[str, float]:
     r"""
     给定模型对一个数学问题进行的回答，以及问题的真实答案，分别评价模型回答的格式和结果是否合理。
-    预期的情况是：输入prompt为r1_zero格式，且在模型输出"\</answer\>"后停止生成。
-    所以，格式合理的标准是模型的输出形如"\</think\> \<answer\> ... \</answer\>"。
+    预期的情况是：输入prompt为r1_zero格式，且在模型输出`</answer>`后停止生成。
+    所以，格式合理的标准是模型的输出形如`</think> <answer> ... </answer>`。（注意必须有空格）
     TODO:对ground_truth的格式要求还不确定，需要验证。
 
     Args:
@@ -1026,7 +1026,7 @@ def r1_zero_reward_fn(response:str,
             - "format_reward" : 格式得分，格式符合前文要求即得分
             - "answer_reward" : 答案得分，只有在格式正确的时候才判断答案是否正确
                 （即不可能格式错答案对）
-                如果有\boxed{}则只看box内答案，无box则看整体
+                如果输出序列中有`\\boxed{}`（注意双转义）则只看box内答案，无box则看`<answer>`标签内全部内容
             - "reward" : 总得分，只有格式和答案都对才得分
     """
     # We are strict about format to evaluate our models.
